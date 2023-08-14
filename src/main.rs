@@ -5,15 +5,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     let extension = "png";
 
     let input = format!("{}.{}",nombre,extension);
-    let output0 = format!("{}0.{}",nombre,extension);
+    //let output0 = format!("{}0.{}",nombre,extension);
     let output = format!("{}1.{}",nombre,extension);
 
-    let img = image::open(&input)?;
+    /*let img = image::open(&input)?;
     let imgbn = process_image(img,50000,360,0.0);
     imgbn.save(&output0)?;
-    println!("listo!");
+    println!("listo!");*/
     let img = image::open(&input)?;
-    let imgbn = process_image(img,50000,360,10.0);
+    let imgbn = process_image(img,60000,360,10.0);
     imgbn.save(&output)?;
 
 

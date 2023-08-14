@@ -47,7 +47,7 @@ pub fn process_image(input_image: DynamicImage,hilos:u32,clavos:u32,menos:f32) -
     draw_circle_border(&mut imgbn, centro_x, centro_y, radio, grosor_borde);
 
   
-    imgbn.save("bn1nose.png").unwrap();
+    imgbn.save("imagennegra.png").unwrap();
 /////////////////////////
     let mut dibujo = image::GrayImage::from_pixel(imgbn.width(), imgbn.height(),Luma([255]));
     let radio = (radio-5) as f32;
@@ -116,10 +116,11 @@ pub fn process_image(input_image: DynamicImage,hilos:u32,clavos:u32,menos:f32) -
         }
            
         writeln!(output, "{}", start.get_id()).unwrap();
-
+        
         ultimo_lugar = max_encontrado;
    
     } 
+    imgbn.save("imagensinlineas.png").unwrap();
     DynamicImage::ImageLuma8(dibujo)
     
 }

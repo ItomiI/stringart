@@ -1,35 +1,9 @@
-use std::{f32::consts::PI, fs::OpenOptions, io::{BufWriter, self}};
-
+use std::{f32::consts::PI, fs::OpenOptions, io::{BufWriter, self}, fmt::{Display, Debug}};
 use image::{DynamicImage, GenericImageView, Luma};
 use std::io::prelude::*;
 
-#[derive(Clone, Copy,Debug)]
-struct Punto {
-    id:u32,
-    x:u32,
-    y:u32,
-    intensida:u32
-}
-impl Punto {
-    pub fn new(id:u32,x:u32,y:u32)-> Punto{
-        Punto { id, x, y, intensida:0 }
-    }
-    pub fn get_id(&self)->u32{
-        self.id
-    }
-    pub fn condenadas(&self)->(u32,u32){
-        (self.x,self.y)
-    }
 
-    pub fn get_intensidad(& self)->u32{
-        self.intensida
-    }
-    pub fn set_intensidad(&mut self,n:u32)->u32{
-        self.intensida = n;
-        self.intensida
-    }
-}
-pub fn process_image(input_image: DynamicImage,hilos:u32,clavos:u32,menos:f32) -> DynamicImage {
+pub fn process_image(input_image: DynamicImage,hilos:u32,clavos:u32,menos:f32,id:u32) -> DynamicImage {
     let (width, height) = input_image.dimensions();
     let radio;
     if width > height{
@@ -47,27 +21,23 @@ pub fn process_image(input_image: DynamicImage,hilos:u32,clavos:u32,menos:f32) -
     draw_circle_border(&mut imgbn, centro_x, centro_y, radio, grosor_borde);
 
   
-    imgbn.save("imagennegra.png").unwrap();
+    imgbn.save("zzz-gris.png").unwrap();
 /////////////////////////
     let mut dibujo = image::GrayImage::from_pixel(imgbn.width(), imgbn.height(),Luma([255]));
     let radio = (radio-5) as f32;
     let mut v = vec![];
 
-    let file_path = "output.txt";
-    let file = OpenOptions::new().create(true).append(true).open(&file_path).unwrap();
-    let file = BufWriter::new(file);
-    let mut output = io::LineWriter::new(file);
-
     for i in 1 ..= clavos{//la pos de cada clavo en un circulo imaginario BIEN ACA
-        let x =f32::floor((imgbn.width()/2) as f32 + radio * f32::cos(((360.0/clavos as f32)* i as f32) * PI / 180.0 + PI/2.0)) as u32;
-        let y =f32::floor((imgbn.height()/2) as f32 + radio *f32::sin(((360.0/clavos as f32)* i as f32 ) * PI / 180.0 + PI/2.0)) as u32;
+        let x = f32::floor((imgbn.width()/2) as f32 + radio * f32::cos(((360.0/clavos as f32)* i as f32) * PI / 180.0 + PI/2.0)) as u32;
+        let y = f32::floor((imgbn.height()/2) as f32 + radio *f32::sin(((360.0/clavos as f32)* i as f32 ) * PI / 180.0 + PI/2.0)) as u32;
         let p = Punto::new(i,x,y);
         v.push(p);
         dibujo.put_pixel(x, y, Luma([0]));
     }
     
     let mut ultimo_lugar = v[0].clone();//ultimo lugar vector
-    for _  in 0..hilos{//cantidad de lineas
+    let mut pasos = Pasos::new();
+    for h  in 0..hilos{//cantidad de lineas
         
         let start = ultimo_lugar;
         let pixelss: Vec<Punto>;//vector de sumas de negro (cada linea)
@@ -82,45 +52,82 @@ pub fn process_image(input_image: DynamicImage,hilos:u32,clavos:u32,menos:f32) -
                 let a = imgbn.get_pixel(pixel.x, pixel.y);
                 temp_suma += (u8::MAX-a[0]) as f32;
             }
-            if temp_suma> menos*pixels.len() as f32{
+            if temp_suma > menos*pixels.len() as f32{
                 temp_suma -=menos*pixels.len() as f32
             }else {
                 temp_suma=0.0;
             }
-            if temp_suma as u32 > max_encontrado.get_intensidad() as u32{
+
+           
+            if temp_suma as u32 >= max_encontrado.get_intensidad() as u32{
                 max_encontrado.id = punto_del_circulo.id;
                 max_encontrado.x = punto_del_circulo.x;
                 max_encontrado.y = punto_del_circulo.y;
                 max_encontrado.set_intensidad(temp_suma as u32);         
             }  
         }
-        if max_encontrado.get_intensidad() < 600{
+        if max_encontrado.intensida < 1200{
+            println!("se consumio en el hilo: {}",h);
             break;
         }
-
         pixelss = pixel_linea(start, max_encontrado);
 
         for p in pixelss{
   
             let mut pixel_img = imgbn.get_pixel(p.x, p.y).clone();
-            if pixel_img[0] <= 250{
-                pixel_img[0] +=5;
+            if pixel_img[0] <= 235{
+                pixel_img[0] +=20;
             }
             imgbn.put_pixel(p.x, p.y, pixel_img);
 
             let mut pixel_dib = dibujo.get_pixel(p.x, p.y).clone();
-            if pixel_dib[0] >= 5{
-                pixel_dib[0]-=5;
+            if pixel_dib[0] >= 20{
+                pixel_dib[0]-=20;
             }
             dibujo.put_pixel(p.x, p.y, pixel_dib);
         }
-           
-        writeln!(output, "{}", start.get_id()).unwrap();
-        
+        //calculo el movimiento
+        //p1 = start p2 = max_encontrado c = clavos
+        let p1 = start.id;
+        let p2 = max_encontrado.id;
+        let mut paso:Paso;
+        if p1 < p2{
+            if p2 - p1 < clavos - p2 + p1{
+                paso = Paso::new_p(p2-p1);
+            }else{
+                paso = Paso::new_n(clavos - p2 + p1);
+            }
+        }else if p1 > p2{
+            if p1-p2 < clavos - p1 + p2{
+                paso = Paso::new_n(p1-p2);
+            }else{
+                paso = Paso::new_p(clavos - p1 + p2);
+            }
+        }else{
+            panic!("no se");
+        }
+
         ultimo_lugar = max_encontrado;
-   
+        //lo cambio a la cantidad de pasos para el motor
+        
+        match paso {
+            Paso::Neg(b) => {
+                paso = Paso::new_n(b*2);//2048 / 256 / 4
+            },
+            Paso::Pos(b) => {
+                paso = Paso::new_p(b*2);
+            },
+        }
+        pasos.add(paso);
+
     } 
-    imgbn.save("imagensinlineas.png").unwrap();
+    let file_path = format!("z{}zz-output.txt",id);
+    let file = OpenOptions::new().create(true).append(true).open(&file_path).unwrap();
+    let file = BufWriter::new(file);
+    let mut output = io::LineWriter::new(file);
+
+    writeln!(output, "{}",pasos).unwrap();
+    imgbn.save("zzz-gastado.png").unwrap();
     DynamicImage::ImageLuma8(dibujo)
     
 }
@@ -145,7 +152,6 @@ fn draw_circle_border(image: &mut image::GrayImage, centro_x: u32, centro_y: u32
         }
     }
 }
-
 
 fn pixel_linea(point1: Punto, point2: Punto) -> Vec<Punto> {
     let (x1, y1) = point1.condenadas();
@@ -193,4 +199,78 @@ fn pixel_linea(point1: Punto, point2: Punto) -> Vec<Punto> {
     }
 
     pixels_on_line
+}
+
+
+#[derive(Clone, Copy,Debug)]
+struct Punto {
+    id:u32,
+    x:u32,
+    y:u32,
+    intensida:u32
+}
+impl PartialEq for Punto {
+    fn eq(&self, other: &Self) -> bool {
+       self.x == other.x && self.y == other.y
+    }
+}
+impl Punto {
+    pub fn new(id:u32,x:u32,y:u32)-> Punto{
+        Punto { id, x, y, intensida:0 }
+    }
+    pub fn condenadas(&self)->(u32,u32){
+        (self.x,self.y)
+    }
+
+    pub fn get_intensidad(& self)->u32{
+        self.intensida
+    }
+    pub fn set_intensidad(&mut self,n:u32)->u32{
+        self.intensida = n;
+        self.intensida
+    }
+}
+enum Paso{
+    Neg(u32),
+    Pos(u32)
+}
+impl Paso {
+    pub fn new_p(n:u32)-> Paso{
+        Self::Pos(n)
+    }
+    pub fn new_n(n:u32)-> Paso{
+        Self::Neg(n)
+    }
+}
+impl Debug for Paso {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Neg(arg0) => write!(f,"-{}",arg0),
+            Self::Pos(arg0) => write!(f,"{}",arg0),
+        }
+    }
+}
+impl Display for Paso {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            Paso::Pos(n) => write!(f, "{n}"),
+            Paso::Neg(n) => write!(f, "-{n}"),
+        }
+    }
+}
+struct Pasos{
+    pasos:Vec<Paso>
+}
+impl Pasos {
+    pub fn new()->Pasos{
+        Pasos { pasos: vec![] }
+    }
+    pub fn add(&mut self,n:Paso){
+        self.pasos.push(n);
+    }
+}
+impl Display for Pasos {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f,"{:?}",self.pasos)
+    }
 }

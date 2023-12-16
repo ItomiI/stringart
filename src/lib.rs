@@ -18,7 +18,7 @@ pub fn process_image(input_image: DynamicImage,hilos:u32,clavos:u32,menos:f32,id
     let mut imgbn = input_image.to_luma8();
     let grosor_borde = 2; 
 
-    draw_circle_border(&mut imgbn, centro_x, centro_y, radio, grosor_borde);
+    draw_circle_border(&mut imgbn, centro_x, centro_y, radio, grosor_borde);//sacable
 
   
     imgbn.save("zzz-gris.png").unwrap();
@@ -27,9 +27,10 @@ pub fn process_image(input_image: DynamicImage,hilos:u32,clavos:u32,menos:f32,id
     let radio = (radio-5) as f32;
     let mut v = vec![];
 
-    for i in 1 ..= clavos{//la pos de cada clavo en un circulo imaginario BIEN ACA
-        let x = f32::floor((imgbn.width()/2) as f32 + radio * f32::cos(((360.0/clavos as f32)* i as f32) * PI / 180.0 + PI/2.0)) as u32;
-        let y = f32::floor((imgbn.height()/2) as f32 + radio *f32::sin(((360.0/clavos as f32)* i as f32 ) * PI / 180.0 + PI/2.0)) as u32;
+    for i in 1 ..= clavos{//la pos de cada clavo en un circulo imaginario BIEN | sencos((2 pi * i / 128)+pi/2) 
+        let calc = ((2.0 * i as f32  /clavos as f32)) * PI + PI/2.0;
+        let x = f32::floor((imgbn.width()/2) as f32 + radio * f32::cos(calc)) as u32;
+        let y = f32::floor((imgbn.height()/2) as f32 + radio *f32::sin(calc)) as u32;
         let p = Punto::new(i,x,y);
         v.push(p);
         dibujo.put_pixel(x, y, Luma([0]));
@@ -37,7 +38,7 @@ pub fn process_image(input_image: DynamicImage,hilos:u32,clavos:u32,menos:f32,id
     
     let mut ultimo_lugar = v[0].clone();//ultimo lugar vector
     let mut pasos = Pasos::new();
-    for h  in 0..hilos{//cantidad de lineas
+    for _  in 0..hilos{//cantidad de lineas
         
         let start = ultimo_lugar;
         let pixelss: Vec<Punto>;//vector de sumas de negro (cada linea)
@@ -45,7 +46,6 @@ pub fn process_image(input_image: DynamicImage,hilos:u32,clavos:u32,menos:f32,id
 
         for punto_del_circulo in &v{//punto del circulo
             let pixels = pixel_linea(start,*punto_del_circulo);
-          
             let mut temp_suma: f32 = 0.0;
         
             for pixel in &pixels{//punto de la linea..... cambiar la forma de sumar, talvez que saque por cada coso que toca
@@ -53,7 +53,7 @@ pub fn process_image(input_image: DynamicImage,hilos:u32,clavos:u32,menos:f32,id
                 temp_suma += (u8::MAX-a[0]) as f32;
             }
             if temp_suma > menos*pixels.len() as f32{
-                temp_suma -=menos*pixels.len() as f32
+               // temp_suma -=menos*pixels.len() as f32// no se que es
             }else {
                 temp_suma=0.0;
             }
@@ -66,13 +66,14 @@ pub fn process_image(input_image: DynamicImage,hilos:u32,clavos:u32,menos:f32,id
                 max_encontrado.set_intensidad(temp_suma as u32);         
             }  
         }
-        if max_encontrado.intensida < 1200{
-            println!("se consumio en el hilo: {}",h);
+
+        if max_encontrado.intensida < 900{
+            println!("se consumio en el hilo: {}",pasos.count+1);
             break;
         }
         pixelss = pixel_linea(start, max_encontrado);
 
-        for p in pixelss{
+        for p in pixelss{//dibuja
   
             let mut pixel_img = imgbn.get_pixel(p.x, p.y).clone();
             if pixel_img[0] <= 235{
@@ -88,6 +89,7 @@ pub fn process_image(input_image: DynamicImage,hilos:u32,clavos:u32,menos:f32,id
         }
         //calculo el movimiento
         //p1 = start p2 = max_encontrado c = clavos
+        //im a genious o como se escriba
         let p1 = start.id;
         let p2 = max_encontrado.id;
         let mut paso:Paso;
@@ -112,10 +114,10 @@ pub fn process_image(input_image: DynamicImage,hilos:u32,clavos:u32,menos:f32,id
         
         match paso {
             Paso::Neg(b) => {
-                paso = Paso::new_n(b*2);//2048 / 256 / 4
+                paso = Paso::new_n(b);//2048 / 256 / 4 // no se porque habia un *2
             },
             Paso::Pos(b) => {
-                paso = Paso::new_p(b*2);
+                paso = Paso::new_p(b);
             },
         }
         pasos.add(paso);
@@ -125,7 +127,7 @@ pub fn process_image(input_image: DynamicImage,hilos:u32,clavos:u32,menos:f32,id
     let file = OpenOptions::new().create(true).append(true).open(&file_path).unwrap();
     let file = BufWriter::new(file);
     let mut output = io::LineWriter::new(file);
-
+    writeln!(output, "const PROGMEM int[{}] pasos = ",pasos.count).unwrap();
     writeln!(output, "{}",pasos).unwrap();
     imgbn.save("zzz-gastado.png").unwrap();
     DynamicImage::ImageLuma8(dibujo)
@@ -253,24 +255,34 @@ impl Debug for Paso {
 impl Display for Paso {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match *self {
-            Paso::Pos(n) => write!(f, "{n}"),
-            Paso::Neg(n) => write!(f, "-{n}"),
+            Paso::Pos(n) => write!(f, "{n}"  ),
+            Paso::Neg(n) => write!(f, "-{n}" ),
         }
     }
 }
+
 struct Pasos{
-    pasos:Vec<Paso>
+    pasos:Vec<Paso>,
+    count:u16
 }
 impl Pasos {
     pub fn new()->Pasos{
-        Pasos { pasos: vec![] }
+        Pasos { pasos: vec![],count:0 }
     }
     pub fn add(&mut self,n:Paso){
         self.pasos.push(n);
+        self.count +=1;
     }
 }
 impl Display for Pasos {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f,"{:?}",self.pasos)
+        let mut a = String::new();
+        for i in &self.pasos{
+            a.push_str(&i.to_string());
+            a.push(',');
+            
+        }
+        a.push('0');
+        write!(f,"{{ {} }}",a)
     }
 }
